@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>好游快爆游戏日历</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <div>
+          <div class="title">好游快爆游戏日历</div>
+          <div class="subtitle">本地浏览与筛选，支持导出 CSV</div>
+        </div>
+        <div class="header-actions">
+          <a class="btn" href="/export.csv?start={{filters.start}}&end={{filters.end}}&region={{filters.region}}&q={{filters.q | urlencode}}">导出CSV</a>
+        </div>
+      </header>
+
+      <section class="card">
+        <form id="filters-form" class="filters" method="get" action="/">
+          <label>
+            <div class="label">开始日期</div>
+            <input type="date" name="start" value="{{filters.start}}" />
+          </label>
+          <label>
+            <div class="label">结束日期</div>
+            <input type="date" name="end" value="{{filters.end}}" />
+          </label>
+          <label>
+            <div class="label">地区</div>
+            <select name="region">
+              <option value="all" {% if filters.region == "all" %}selected{% endif %}>全部</option>
+              <option value="domestic" {% if filters.region == "domestic" %}selected{% endif %}>国内</option>
+              <option value="overseas" {% if filters.region == "overseas" %}selected{% endif %}>海外</option>
+            </select>
+          </label>
+          <label class="grow">
+            <div class="label">关键字</div>
+            <input type="text" name="q" placeholder="游戏名/文本..." value="{{filters.q}}" />
+          </label>
+          <div class="filter-actions">
+            <button class="btn primary" type="submit">筛选</button>
+            <a class="btn ghost" href="/">重置</a>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="meta">
+          共 <b>{{ rows|length }}</b> 条（最多展示 800 条）
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>游戏名称</th>
+                <th>日期</th>
+                <th>时间</th>
+                <th>地区</th>
+                <th>事件类型</th>
+                <th>来源</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+              <tr>
+                <td class="name">{{ r["game_name"] }}</td>
+                <td>{{ r["event_date"] }}</td>
+                <td>{{ r["event_time"] or "" }}</td>
+                <td>
+                  {% if r["region"] == "domestic" %}国内{% elif r["region"] == "overseas" %}海外{% else %}国内{% endif %}
+                </td>
+                <td>{{ r["event_type"] }}</td>
+                <td>
+                  <a href="{{ r["source_url"] }}" target="_blank" rel="noreferrer">打开</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <details class="details">
+          <summary>查看原始文本（前20条）</summary>
+          <ol class="rawlist">
+            {% for r in rows[:20] %}
+              <li>{{ r["raw_text"] }}</li>
+            {% endfor %}
+          </ol>
+        </details>
+      </section>
+    </div>
+    <script>
+      (function () {
+        var startInput = document.querySelector('input[name="start"]');
+        if (!startInput) return;
+        var hadStartValue = !!startInput.value;
+        if (!hadStartValue) {
+          var d = new Date();
+          var y = d.getFullYear();
+          var m = String(d.getMonth() + 1).padStart(2, "0");
+          var day = String(d.getDate()).padStart(2, "0");
+          startInput.value = y + "-" + m + "-" + day;
+        }
+
+        // 首次打开页面（无任何查询参数）时，自动提交一次，让列表立即按“今日起”过滤
+        var noQuery = !window.location.search || window.location.search === "";
+        var notSubmitted = sessionStorage.getItem("autoSubmittedTodayStart") !== "1";
+        var form = document.getElementById("filters-form");
+        if (!hadStartValue && noQuery && notSubmitted && form) {
+          sessionStorage.setItem("autoSubmittedTodayStart", "1");
+          form.submit();
+        }
+      })();
+    </script>
+  </body>
+</html>
+
