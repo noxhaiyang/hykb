@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import streamlit as st
 
@@ -17,11 +17,12 @@ def main() -> None:
     st.title("好游快爆游戏日历")
 
     today = date.today()
+    default_end = today + timedelta(days=30)
     col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
     with col1:
         start = st.date_input("开始日期", value=today)
     with col2:
-        end = st.date_input("结束日期", value=today)
+        end = st.date_input("结束日期", value=default_end)
     with col3:
         region_label = st.selectbox("地区", ["全部", "国内", "海外"], index=0)
     with col4:
