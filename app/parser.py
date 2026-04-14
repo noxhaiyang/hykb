@@ -14,6 +14,7 @@ from .utils import (
     guess_region,
     normalize_space,
     parse_month_day_to_date,
+    parse_month_days_in_text,
 )
 
 
@@ -83,7 +84,7 @@ def parse_timeline_html(
     将时间线 HTML 解析为 TimelineEvent 列表。
 
     解析原则：
-    - 以页面顺序维护当前日期（遇到 '04月07日 今天' 之类行就更新）
+    - 每条先有卡片日期 card_date；若条目标题含「M月D日」，则以标题内日期为准（多段时取最后一段，常为定档/最终日期）
     - 只采集“条目标题链接”，跳过“下载/预约/试玩”等动作链接
     """
     soup = BeautifulSoup(html, "lxml")
@@ -131,10 +132,13 @@ def parse_timeline_html(
             if not game_name:
                 continue
 
+            title_dates = parse_month_days_in_text(a_text, today=today)
+            event_date = title_dates[-1] if title_dates else card_date
+
             events.append(
                 TimelineEvent(
                     game_name=game_name,
-                    event_date=card_date,
+                    event_date=event_date,
                     event_time=event_time,
                     region=region,
                     event_type=event_type,

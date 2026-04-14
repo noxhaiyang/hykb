@@ -5,7 +5,7 @@ import random
 import re
 import time
 from datetime import date, datetime, timedelta
-from typing import Callable, Optional, Tuple, TypeVar
+from typing import Callable, List, Optional, Tuple, TypeVar
 
 from .models import EventType, Region
 
@@ -38,6 +38,16 @@ def normalize_space(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip())
 
 
+def _date_from_month_day(month: int, day: int, *, today: date) -> date:
+    guessed = date(today.year, month, day)
+    # 跨年修正：如果今天在 1月，遇到 12月则认为是去年；反之亦然
+    if today.month == 1 and month == 12:
+        guessed = date(today.year - 1, month, day)
+    elif today.month == 12 and month == 1:
+        guessed = date(today.year + 1, month, day)
+    return guessed
+
+
 def parse_month_day_to_date(
     month_day_text: str, *, today: Optional[date] = None
 ) -> Optional[date]:
@@ -50,17 +60,19 @@ def parse_month_day_to_date(
         return None
 
     today = today or date.today()
-    month = int(m.group("month"))
-    day = int(m.group("day"))
-    guessed = date(today.year, month, day)
+    return _date_from_month_day(int(m.group("month")), int(m.group("day")), today=today)
 
-    # 跨年修正：如果今天在 1月，遇到 12月则认为是去年；反之亦然
-    if today.month == 1 and month == 12:
-        guessed = date(today.year - 1, month, day)
-    elif today.month == 12 and month == 1:
-        guessed = date(today.year + 1, month, day)
 
-    return guessed
+def parse_month_days_in_text(text: str, *, today: Optional[date] = None) -> List[date]:
+    """
+    解析文本中全部「M月D日」片段（按出现顺序）。
+    用于条目标题内日期：可覆盖时间线卡片头日期（卡片有时与条目真实日期不一致）。
+    """
+    today = today or date.today()
+    return [
+        _date_from_month_day(int(m.group("month")), int(m.group("day")), today=today)
+        for m in MONTH_DAY_RE.finditer(text or "")
+    ]
 
 
 def extract_time(text: str) -> Optional[str]:
