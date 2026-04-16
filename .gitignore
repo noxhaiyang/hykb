@@ -2,3 +2,11 @@
 __pycache__/
 *.pyc
 data/*.log
+data/*.db
+
+# Local scrape/probe/render artifacts
+data/bing_*.html
+data/competition_*.json
+data/competition_*.jsonl
+data/dingtalk_preview*.md
+data/douyin_heat_template.csv
