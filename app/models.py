@@ -16,6 +16,10 @@ class EventType(str, Enum):
     update = "更新"
     release = "上线"
     test = "测试"
+    predownload = "预下载"
+    reservation = "预约"
+    trial = "试玩"
+    recruit = "招募"
 
 
 @dataclass(frozen=True)

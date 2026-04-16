@@ -12,11 +12,15 @@ from .models import EventType, Region
 T = TypeVar("T")
 
 MONTH_DAY_RE = re.compile(r"(?P<month>\d{1,2})月(?P<day>\d{1,2})日")
+# 快爆标题常见「4.17正式上线」；日须两位数以减少与评分「5.7」等混淆；左侧禁止紧贴数字以免误匹配「2026.04」
+DOT_MONTH_DAY_RE = re.compile(
+    r"(?<![0-9])(?P<month>1[0-2]|[1-9])\.(?P<day>0[1-9]|[12][0-9]|3[01])(?![0-9])"
+)
 TIME_RE = re.compile(r"\b(?P<hour>[01]?\d|2[0-3]):(?P<minute>[0-5]\d)\b")
 
 
 def stable_dedupe_key(
-    game_name: str,
+    source_url: str,
     event_date: date,
     event_time: Optional[str],
     event_type: str,
@@ -24,7 +28,7 @@ def stable_dedupe_key(
 ) -> str:
     base = "|".join(
         [
-            normalize_space(game_name).lower(),
+            normalize_space(source_url).lower(),
             event_date.isoformat(),
             (event_time or "").strip(),
             (event_type or "").strip().lower(),
@@ -65,14 +69,19 @@ def parse_month_day_to_date(
 
 def parse_month_days_in_text(text: str, *, today: Optional[date] = None) -> List[date]:
     """
-    解析文本中全部「M月D日」片段（按出现顺序）。
+    解析文本中全部「M月D日」与「M.DD」片段（按在文中出现顺序）。
     用于条目标题内日期：可覆盖时间线卡片头日期（卡片有时与条目真实日期不一致）。
     """
     today = today or date.today()
-    return [
-        _date_from_month_day(int(m.group("month")), int(m.group("day")), today=today)
-        for m in MONTH_DAY_RE.finditer(text or "")
-    ]
+    spans: List[tuple[int, date]] = []
+    for m in MONTH_DAY_RE.finditer(text or ""):
+        d = _date_from_month_day(int(m.group("month")), int(m.group("day")), today=today)
+        spans.append((m.start(), d))
+    for m in DOT_MONTH_DAY_RE.finditer(text or ""):
+        d = _date_from_month_day(int(m.group("month")), int(m.group("day")), today=today)
+        spans.append((m.start(), d))
+    spans.sort(key=lambda x: x[0])
+    return [d for _, d in spans]
 
 
 def extract_time(text: str) -> Optional[str]:
@@ -80,6 +89,21 @@ def extract_time(text: str) -> Optional[str]:
     if not m:
         return None
     return f"{int(m.group('hour')):02d}:{int(m.group('minute')):02d}"
+
+
+def has_predownload_narrative(text: str) -> bool:
+    """
+    判断文案是否描述「预下载」这一事件，而非仅商品名里的「-预下载」后缀。
+    """
+    t = text or ""
+    return (
+        "预下载已开启" in t
+        or "开启预下载" in t
+        or "预下载开启" in t
+        or ("定档" in t and "预下载" in t)
+        or "预下载，" in t
+        or "预下载," in t
+    )
 
 
 def guess_region(text: str) -> Region:
@@ -94,19 +118,29 @@ def guess_region(text: str) -> Region:
 
 def guess_event_type(text: str) -> EventType:
     t = text or ""
+    if "招募" in t:
+        return EventType.recruit
     if "测试" in t or "开测" in t:
         return EventType.test
-    if "正式上线" in t or "上线" in t:
+    if has_predownload_narrative(t):
+        return EventType.predownload
+    if "试玩" in t:
+        return EventType.trial
+    # 纯上线 / 标题仅有「-预下载」后缀但叙述为正式上线（parser 拆条外的单卡）
+    if "正式上线" in t or "上线" in t or "开服" in t:
         return EventType.release
-    # 其余统一归为“更新”（含预约/预下载/招募/版本等）
+    if "预约" in t or "预购" in t:
+        return EventType.reservation
+    # 其余统一归为“更新”（含预约/招募/版本等）
     if (
         "版本" in t
         or "更新" in t
         or "新赛季" in t
-        or "预下载" in t
-        or "预约" in t
+        or "活动" in t
+        or "联动" in t
+        or "登场" in t
+        or "开启" in t
         or "抢注" in t
-        or "招募" in t
     ):
         return EventType.update
     return EventType.update

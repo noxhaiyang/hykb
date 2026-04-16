@@ -3,9 +3,20 @@
 功能：
 - 每天抓取 `https://www.3839.com/timeline.html` 的时间线条目
 - 生成结构化“游戏日历”数据（SQLite 存储）
-- 本地Web页面浏览/筛选（日期范围、地区、关键字）
+- 本地Web页面浏览/筛选（日期范围、地区、关键字）+ 业务看板
 - 一键导出 CSV
 - 支持钉钉机器人每日群播报（近30天游戏，海外重点置顶）
+- 一体化自动化流水线：抓取 + 统计 +（可选）钉钉推送 + 量化产出
+
+## 参赛亮点（可直接写进报名材料）
+
+- **真实业务场景**：每天追踪手游上线/测试时间线，为运营、投放和内容选题提供依据。
+- **AI优化点**：将“人工刷站点+手工汇总+人工群发”改为可重复执行的自动化流水线。
+- **量化结果**：流水线每次运行自动产出 `data/competition_snapshot.json` 与 `data/competition_metrics.jsonl`，记录：
+  - 抓取新增/更新/去重数量
+  - 未来窗口内事件规模、海外占比、数据完整度
+  - 自动化总耗时、人工基线耗时、节省分钟数/节省比例
+- **可复用性**：参数化支持统计天数、日报样式、是否发送钉钉，便于迁移到其他资讯站点。
 
 ## 1) 安装
 
@@ -97,6 +108,29 @@ python -m app.report_dingtalk run --webhook "你的webhook" --secret "你的secr
   - `-m app.report_dingtalk run --webhook "你的webhook" --secret "你的secret"`
 - 起始于：
   - `C:\Users\11723\hykb_game_calendar`
+
+## 6) 一体化自动化流水线（推荐参赛演示）
+
+### 6.1 仅跑自动化并生成量化证据（不发钉钉）
+
+```bash
+python -m app.automation run --days 30 --manual-minutes 20
+```
+
+运行后会自动生成：
+- `data/competition_snapshot.json`：本次运行快照（可做答辩截图）
+- `data/competition_metrics.jsonl`：历史运行轨迹（可做趋势对比）
+
+### 6.2 自动化 + 钉钉推送
+
+```bash
+python -m app.automation run --days 30 --send-dingtalk --webhook "你的webhook" --secret "你的secret" --style brief
+```
+
+### 6.3 建议展示流程（3分钟）
+1. 打开 Web 看板，展示总量、海外占比、未来7天密度、数据完整度。
+2. 运行一体化流水线命令，展示自动生成的量化文件。
+3. 对比“人工分钟数 vs 自动化分钟数”，给出节省比例。
 
 ## 数据字段说明
 - **游戏名称**：`game_name`

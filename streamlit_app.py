@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 import streamlit as st
 
+from app.analytics import build_dashboard
 from app.store import connect, init_db, query_events
 from app.utils import clamp_date_range
 
@@ -45,6 +46,7 @@ def main() -> None:
     finally:
         conn.close()
 
+    dashboard = build_dashboard(rows, today=today)
     data = []
     for r in rows:
         data.append(
@@ -58,6 +60,20 @@ def main() -> None:
                 "更新时间": r["updated_at"],
             }
         )
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("总事件数", dashboard["total"])
+    k2.metric("海外占比", f"{dashboard['overseas_rate']}%")
+    k3.metric("上线事件", dashboard["release_cnt"])
+    k4.metric("缺失时间率", f"{dashboard['missing_time_rate']}%")
+    st.caption(
+        "测试 {test_cnt} | 预下载 {predownload_cnt} | 国内 {domestic} | 海外 {overseas}".format(
+            test_cnt=dashboard["test_cnt"],
+            predownload_cnt=dashboard["predownload_cnt"],
+            domestic=dashboard["domestic"],
+            overseas=dashboard["overseas"],
+        )
+    )
 
     st.caption(f"共 {len(data)} 条")
     st.dataframe(data, use_container_width=True, hide_index=True)

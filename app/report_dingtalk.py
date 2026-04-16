@@ -57,36 +57,50 @@ def _build_report_markdown(rows: list[dict], *, start: date, end: date) -> str:
 
 def _build_report_markdown_brief(rows: list[dict], *, start: date, end: date) -> str:
     """
-    老板视图：更短，先看结论，海外 TOP10 置顶。
+    老板视图：保留海外TOP10 + 未来7天看点，排版整齐易扫读。
     """
     overseas = [r for r in rows if r["region"] == "overseas"]
     domestic = [r for r in rows if r["region"] != "overseas"]
 
-    # 按日期升序，便于看最近上线节奏
     def sort_key(r: dict):
         return (r["event_date"], r["event_time"] or "", r["game_name"])
 
-    overseas_sorted = sorted(overseas, key=sort_key)
     all_sorted = sorted(rows, key=sort_key)
+    overseas_sorted = sorted(overseas, key=sort_key)
+    next7_end = (start + timedelta(days=7)).isoformat()
+    next7 = [r for r in all_sorted if r["event_date"] <= next7_end]
+
+    def fmt_when(r: dict) -> str:
+        return f"{r['event_date']}" + (f" {r['event_time']}" if r["event_time"] else " 待定")
+
+    def fmt_line(idx: int, r: dict) -> str:
+        region_cn = "海外" if r["region"] == "overseas" else "国内"
+        return (
+            f"{idx:02d}. **{r['game_name']}**\n"
+            f"    - 时间：{fmt_when(r)} ｜ 地区：{region_cn} ｜ 状态：{r['event_type']}"
+        )
 
     lines: list[str] = []
-    lines.append(f"### 游戏月报简版（{start.isoformat()} ~ {end.isoformat()}）")
+    lines.append(f"### 游戏日历月报简版（{start.isoformat()} ~ {end.isoformat()}）")
+    lines.append("")
+    lines.append("#### 核心概览")
     lines.append(f"- 总量：**{len(rows)}** | 海外：**{len(overseas)}** | 国内：**{len(domestic)}**")
+    lines.append(f"- 未来7天事件 **{len(next7)}** 条")
+    lines.append(f"- 海外重点窗口（未来7天）**{sum(1 for r in next7 if r['region'] == 'overseas')}** 条")
     lines.append("")
     lines.append("#### 海外TOP10（重点）")
     if not overseas_sorted:
-        lines.append("- 近一个月暂无海外游戏")
+        lines.append("- 未来窗口内暂无海外重点游戏")
     else:
-        for r in overseas_sorted[:10]:
-            when = f"{r['event_date']}" + (f" {r['event_time']}" if r["event_time"] else "")
-            lines.append(f"- **{r['game_name']}**｜{when}｜{r['event_type']}")
+        for i, r in enumerate(overseas_sorted[:10], start=1):
+            lines.append(fmt_line(i, r))
     lines.append("")
-    lines.append("#### 未来7天看点（前15条）")
-    next7 = [r for r in all_sorted if r["event_date"] <= (start + timedelta(days=7)).isoformat()]
-    for r in next7[:15]:
-        when = f"{r['event_date']}" + (f" {r['event_time']}" if r["event_time"] else "")
-        region_cn = "海外" if r["region"] == "overseas" else "国内"
-        lines.append(f"- {r['game_name']}｜{when}｜{region_cn}｜{r['event_type']}")
+    lines.append("#### 未来7天看点（前30条）")
+    if not next7:
+        lines.append("- 未来7天暂无新增看点")
+    else:
+        for i, r in enumerate(next7[:30], start=1):
+            lines.append(fmt_line(i, r))
     return "\n".join(lines)
 
 

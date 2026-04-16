@@ -79,7 +79,7 @@ def upsert_events(conn: sqlite3.Connection, events: Sequence[TimelineEvent]) -> 
 
     for e in events:
         dedupe = stable_dedupe_key(
-            e.game_name, e.event_date, e.event_time, e.event_type.value, e.region.value
+            e.source_url, e.event_date, e.event_time, e.event_type.value, e.region.value
         )
         row = {
             "dedupe_key": dedupe,
@@ -158,18 +158,29 @@ def upsert_events(conn: sqlite3.Connection, events: Sequence[TimelineEvent]) -> 
     return {"inserted": inserted, "updated": updated, "total": len(events)}
 
 
+def replace_all_events(conn: sqlite3.Connection, events: Sequence[TimelineEvent]) -> dict:
+    """
+    全量替换 timeline_events（以当前页面快照为准）。
+    用于规则调整后的数据重建，避免历史规则残留干扰结果。
+    """
+    conn.execute("DELETE FROM timeline_events")
+    stats = upsert_events(conn, events)
+    stats["replaced_all"] = 1
+    return stats
+
+
 def cleanup_duplicate_source_events(conn: sqlite3.Connection) -> int:
     """
-    清理历史重复：同 source_url + event_type 出现多条时，仅保留最早日期那条。
-    返回删除行数。
+    清理历史重复：同一详情链接、同一事件类型、同一事件日出现多条时仅保留一条
+    （时间线多个区块重复挂载同一条目）；不同事件日（如预下载日 vs 上线日）互不合并。
     """
     sql = """
     WITH ranked AS (
       SELECT
         id,
         ROW_NUMBER() OVER (
-          PARTITION BY source_url, event_type
-          ORDER BY event_date ASC, COALESCE(event_time, '99:99') ASC, id ASC
+          PARTITION BY source_url, event_type, event_date
+          ORDER BY COALESCE(event_time, '99:99') ASC, id ASC
         ) AS rn
       FROM timeline_events
       WHERE source_url LIKE '%/a/%'
@@ -214,33 +225,10 @@ def query_events(
 
     cur = conn.execute(
         f"""
-        WITH ranked AS (
-          SELECT
-            id,
-            game_name,
-            event_date,
-            event_time,
-            region,
-            event_type,
-            tags,
-            reservation_count,
-            raw_text,
-            source_url,
-            updated_at,
-            ROW_NUMBER() OVER (
-              PARTITION BY game_name, event_date, event_type
-              ORDER BY
-                CASE WHEN source_url LIKE '%/a/%' THEN 0 ELSE 1 END,
-                updated_at DESC,
-                id DESC
-            ) AS rn
-          FROM timeline_events
-          {where_sql}
-        )
         SELECT game_name, event_date, event_time, region, event_type, tags, reservation_count, raw_text, source_url, updated_at
-        FROM ranked
-        WHERE rn = 1
-        ORDER BY event_date ASC, COALESCE(event_time, '') ASC, game_name ASC
+        FROM timeline_events
+        {where_sql}
+        ORDER BY event_date ASC, COALESCE(event_time, '') ASC, game_name ASC, id ASC
         LIMIT ?
         """,
         (*params, int(limit)),

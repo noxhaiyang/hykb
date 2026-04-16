@@ -7,10 +7,11 @@ from typing import Optional
 import requests
 
 from .parser import parse_timeline_html
-from .store import cleanup_duplicate_source_events, connect, init_db, upsert_events
+from .store import cleanup_duplicate_source_events, connect, init_db, replace_all_events, upsert_events
 from .utils import request_with_retry
 
 
+# 仅抓取该页 DOM 中的时间线条目，不请求游戏详情页、不根据详情页「相关游戏」做扩展抓取。
 TIMELINE_URL = "https://www.3839.com/timeline.html"
 
 
@@ -32,14 +33,17 @@ def fetch_timeline_html(url: str = TIMELINE_URL) -> str:
     return request_with_retry(_do, retries=3)
 
 
-def run_once(today: Optional[date] = None) -> dict:
+def run_once(today: Optional[date] = None, *, full_replace: bool = True) -> dict:
     html = fetch_timeline_html()
     events = parse_timeline_html(html, base_url=TIMELINE_URL, today=today)
 
     conn = connect()
     try:
         init_db(conn)
-        stats = upsert_events(conn, events)
+        if full_replace:
+            stats = replace_all_events(conn, events)
+        else:
+            stats = upsert_events(conn, events)
         deleted = cleanup_duplicate_source_events(conn)
         stats["deleted_duplicates"] = deleted
     finally:
@@ -54,12 +58,17 @@ def main() -> None:
 
     run_p = sub.add_parser("run", help="抓取时间线并写入SQLite")
     run_p.add_argument("--today", help="用于调试的 today，格式 YYYY-MM-DD", default=None)
+    run_p.add_argument(
+        "--incremental",
+        action="store_true",
+        help="使用增量写入模式（默认全量替换，推荐保持默认）",
+    )
 
     args = parser.parse_args()
 
     if args.cmd == "run":
         today = date.fromisoformat(args.today) if args.today else None
-        stats = run_once(today=today)
+        stats = run_once(today=today, full_replace=not args.incremental)
         print(
             f"crawler done. inserted={stats['inserted']} updated={stats['updated']} "
             f"deleted_duplicates={stats.get('deleted_duplicates', 0)} total_parsed={stats['total']}"

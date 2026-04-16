@@ -11,13 +11,28 @@
       <header class="header">
         <div>
           <div class="title">好游快爆游戏日历</div>
-          <div class="subtitle">本地浏览与筛选，支持导出 CSV</div>
+          <div class="subtitle">本地浏览与筛选，支持导出 CSV · 自动化运营看板</div>
         </div>
         <div class="header-actions">
+          <nav class="top-nav">
+            <a href="#dashboard">总览</a>
+            <a href="#viz">可视化</a>
+            <a href="#table">明细</a>
+          </nav>
           <a class="btn" href="/export.csv?start={{filters.start}}&end={{filters.end}}&region={{filters.region}}&q={{filters.q | urlencode}}">导出CSV</a>
         </div>
       </header>
 
+      <div class="dashboard-layout">
+        <aside class="sidebar card">
+          <div class="sidebar-title">导航菜单</div>
+          <a class="side-link" href="#dashboard">数据总览</a>
+          <a class="side-link" href="#viz">数据可视化</a>
+          <a class="side-link" href="#table">明细数据</a>
+          <a class="side-link" href="/reconcile?day={{ filters.start or '' }}">当日对账</a>
+        </aside>
+
+        <main class="main-content">
       <section class="card">
         <form id="filters-form" class="filters" method="get" action="/">
           <label>
@@ -45,9 +60,90 @@
             <a class="btn ghost" href="/">重置</a>
           </div>
         </form>
+        <div class="quick-range">
+          <button type="button" class="chip" data-days="0">今天</button>
+          <button type="button" class="chip" data-days="7">未来7天</button>
+          <button type="button" class="chip" data-days="30">未来30天</button>
+          <button type="button" class="chip" data-days="90">未来90天</button>
+        </div>
       </section>
 
-      <section class="card">
+      <section id="dashboard" class="card">
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-label">总事件数</div>
+            <div class="kpi-value">{{ dashboard.total }}</div>
+            <div class="kpi-sub">今日 {{ dashboard.today_cnt }} 条</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">海外占比</div>
+            <div class="kpi-value">{{ dashboard.overseas_rate }}%</div>
+            <div class="kpi-sub">海外 {{ dashboard.overseas }} / 国内 {{ dashboard.domestic }}</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">未来7天密度</div>
+            <div class="kpi-value">{{ dashboard.next7 }}</div>
+            <div class="kpi-sub">
+              未来7天事件数；对比后7天 {{ dashboard.next7_after }}（差值 {{ dashboard.next7_delta }}, {{ dashboard.next7_delta_pct }}%）
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="viz" class="card">
+        <div class="viz-header">
+          <div class="viz-header-title">数据可视化</div>
+          <div class="viz-header-sub">简洁图表总览，辅助快速判断数据结构与趋势</div>
+        </div>
+        <div class="insight-pills">
+          {% for tip in viz_insights %}
+          <div class="insight-pill">{{ tip }}</div>
+          {% endfor %}
+        </div>
+        <div class="viz-grid">
+          <div class="viz-card">
+            <div class="viz-title">事件类型分布</div>
+            <div class="viz-list">
+              {% for item in event_stats %}
+              <div class="viz-item">
+                <div class="viz-head">
+                  <span>{{ item.name }}</span>
+                  <span>{{ item.count }}（{{ item.pct }}%）</span>
+                </div>
+                <div class="viz-bar-bg">
+                  <div class="viz-bar-fill" style="width: {{ item.pct }}%"></div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="viz-card">
+            <div class="viz-title">地区占比</div>
+            {% set domestic_pct = region_stats[0].pct if region_stats|length > 0 else 0 %}
+            <div class="pie-wrap">
+              <div
+                class="pie-chart"
+                style="background: conic-gradient(#818cf8 0 {{ domestic_pct }}%, #22d3ee {{ domestic_pct }}% 100%);"
+              ></div>
+              <div class="pie-legend">
+                {% for item in region_stats %}
+                <div class="pie-legend-item">
+                  <span class="dot {% if item.name == '国内' %}dot-domestic{% else %}dot-overseas{% endif %}"></span>
+                  <span>{{ item.name }}：{{ item.count }}（{{ item.pct }}%）</span>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="viz-card trend-card">
+          <div class="viz-title">日期趋势（每日事件数）</div>
+          <svg id="trend-svg" class="trend-svg" viewBox="0 0 900 220" preserveAspectRatio="none"></svg>
+          <div id="trend-labels" class="trend-labels"></div>
+        </div>
+      </section>
+
+      <section id="table" class="card">
         <div class="meta">
           共 <b>{{ rows|length }}</b> 条（最多展示 800 条）
         </div>
@@ -68,11 +164,21 @@
               <tr>
                 <td class="name">{{ r["game_name"] }}</td>
                 <td>{{ r["event_date"] }}</td>
-                <td>{{ r["event_time"] or "" }}</td>
+                <td>
+                  {% if r["event_time"] %}
+                    {{ r["event_time"] }}
+                  {% else %}
+                    <span class="time-pending">待定</span>
+                  {% endif %}
+                </td>
                 <td>
                   {% if r["region"] == "domestic" %}国内{% elif r["region"] == "overseas" %}海外{% else %}国内{% endif %}
                 </td>
-                <td>{{ r["event_type"] }}</td>
+                <td>
+                  <span class="event-tag" data-type="{{ r["event_type"] }}">
+                    {{ r["event_type"] }}
+                  </span>
+                </td>
                 <td>
                   <a href="{{ r["source_url"] }}" target="_blank" rel="noreferrer">打开</a>
                 </td>
@@ -90,7 +196,37 @@
           </ol>
         </details>
       </section>
+        </main>
+      </div>
     </div>
+    <script>
+      (function () {
+        var sections = ["dashboard", "viz", "table"];
+        var navLinks = Array.prototype.slice.call(document.querySelectorAll('.top-nav a[href^="#"], .side-link[href^="#"]'));
+        function setActive(id) {
+          navLinks.forEach(function (a) {
+            var on = a.getAttribute("href") === "#" + id;
+            a.classList.toggle("active", on);
+          });
+        }
+        var observer = new IntersectionObserver(
+          function (entries) {
+            var visible = entries
+              .filter(function (e) { return e.isIntersecting; })
+              .sort(function (a, b) { return b.intersectionRatio - a.intersectionRatio; });
+            if (visible.length > 0) {
+              setActive(visible[0].target.id);
+            }
+          },
+          { root: null, rootMargin: "-15% 0px -55% 0px", threshold: [0.2, 0.45, 0.7] }
+        );
+        sections.forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) observer.observe(el);
+        });
+        setActive("dashboard");
+      })();
+    </script>
     <script>
       (function () {
         var startInput = document.querySelector('input[name="start"]');
@@ -112,6 +248,101 @@
           sessionStorage.setItem("autoSubmittedTodayStart", "1");
           form.submit();
         }
+      })();
+    </script>
+    <script>
+      (function () {
+        var chips = document.querySelectorAll(".chip[data-days]");
+        var form = document.getElementById("filters-form");
+        var startInput = document.querySelector('input[name="start"]');
+        var endInput = document.querySelector('input[name="end"]');
+        if (!chips.length || !form || !startInput || !endInput) return;
+
+        function fmt(d) {
+          var y = d.getFullYear();
+          var m = String(d.getMonth() + 1).padStart(2, "0");
+          var day = String(d.getDate()).padStart(2, "0");
+          return y + "-" + m + "-" + day;
+        }
+
+        chips.forEach(function (chip) {
+          chip.addEventListener("click", function () {
+            var days = parseInt(chip.getAttribute("data-days") || "0", 10);
+            var start = new Date();
+            var end = new Date();
+            end.setDate(start.getDate() + days);
+            startInput.value = fmt(start);
+            endInput.value = fmt(end);
+            form.submit();
+          });
+        });
+      })();
+    </script>
+    <script>
+      (function () {
+        var data = {{ trend_data | tojson }};
+        var svg = document.getElementById("trend-svg");
+        var labels = document.getElementById("trend-labels");
+        if (!svg || !labels || !data || data.length === 0) return;
+
+        var w = 900;
+        var h = 220;
+        var padL = 30;
+        var padR = 20;
+        var padT = 20;
+        var padB = 40;
+        var innerW = w - padL - padR;
+        var innerH = h - padT - padB;
+        var maxV = Math.max.apply(null, data.map(function (d) { return d.count; })) || 1;
+
+        function x(i) {
+          if (data.length === 1) return padL + innerW / 2;
+          return padL + (innerW * i) / (data.length - 1);
+        }
+        function y(v) {
+          return padT + innerH - (v / maxV) * innerH;
+        }
+
+        var grid = "";
+        for (var i = 0; i <= 4; i++) {
+          var gy = padT + (innerH * i) / 4;
+          grid += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (w - padR) + '" y2="' + gy + '" class="trend-grid" />';
+        }
+
+        var points = data.map(function (d, i) { return x(i) + "," + y(d.count); }).join(" ");
+        var circles = data.map(function (d, i) {
+          return '<circle cx="' + x(i) + '" cy="' + y(d.count) + '" r="3.2" class="trend-dot"><title>' + d.date + '：' + d.count + '</title></circle>';
+        }).join("");
+
+        svg.innerHTML =
+          '<g>' + grid + '</g>' +
+          '<polyline class="trend-line" points="' + points + '" />' +
+          circles;
+
+        var polyline = svg.querySelector(".trend-line");
+        if (polyline) {
+          var len = polyline.getTotalLength();
+          polyline.style.strokeDasharray = String(len);
+          polyline.style.strokeDashoffset = String(len);
+          polyline.style.transition = "stroke-dashoffset 1000ms cubic-bezier(0.22, 1, 0.36, 1)";
+          requestAnimationFrame(function () {
+            polyline.style.strokeDashoffset = "0";
+          });
+        }
+        var dotNodes = svg.querySelectorAll(".trend-dot");
+        dotNodes.forEach(function (dot, i) {
+          setTimeout(function () {
+            dot.classList.add("show");
+          }, 260 + i * 28);
+        });
+
+        var labelStep = data.length > 16 ? Math.ceil(data.length / 8) : 1;
+        labels.innerHTML = data
+          .map(function (d, i) {
+            if (i % labelStep !== 0 && i !== data.length - 1) return "";
+            return '<span>' + d.date.slice(5) + "</span>";
+          })
+          .join("");
       })();
     </script>
   </body>
