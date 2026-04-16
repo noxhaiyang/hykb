@@ -5,6 +5,7 @@ from datetime import date, timedelta
 import streamlit as st
 
 from app.analytics import build_dashboard
+from app.crawler import run_once
 from app.store import connect, init_db, query_events
 from app.utils import clamp_date_range
 
@@ -13,12 +14,22 @@ def _to_date_str(d: date | None) -> str | None:
     return d.isoformat() if d else None
 
 
+def _db_event_count(conn) -> int:
+    row = conn.execute("SELECT COUNT(1) AS c FROM timeline_events").fetchone()
+    return int(row["c"] or 0) if row else 0
+
+
 def main() -> None:
     st.set_page_config(page_title="好游快爆游戏日历", layout="wide")
     st.title("好游快爆游戏日历")
 
     today = date.today()
     default_end = today + timedelta(days=30)
+
+    top_left, top_right = st.columns([3, 1])
+    with top_right:
+        refresh = st.button("抓取/刷新数据", use_container_width=True)
+
     col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
     with col1:
         start = st.date_input("开始日期", value=today)
@@ -35,6 +46,19 @@ def main() -> None:
     conn = connect()
     try:
         init_db(conn)
+        # Streamlit Cloud/全新环境下 games.db 通常为空：自动抓取一次以填充数据。
+        if refresh or (_db_event_count(conn) == 0 and not st.session_state.get("_auto_crawled")):
+            with st.spinner("正在抓取时间线并写入数据库..."):
+                stats = run_once(full_replace=True)
+            st.session_state["_auto_crawled"] = True
+            st.caption(
+                "抓取完成：inserted={inserted} updated={updated} total={total} deleted_duplicates={deleted}".format(
+                    inserted=stats.get("inserted", 0),
+                    updated=stats.get("updated", 0),
+                    total=stats.get("total", 0),
+                    deleted=stats.get("deleted_duplicates", 0),
+                )
+            )
         rows = query_events(
             conn,
             start=_to_date_str(start),
