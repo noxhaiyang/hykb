@@ -71,7 +71,7 @@ def _build_report_markdown_brief(rows: list[dict], *, start: date, end: date) ->
     next7 = [r for r in all_sorted if r["event_date"] <= next7_end]
 
     def fmt_when(r: dict) -> str:
-        return f"{r['event_date']}" + (f" {r['event_time']}" if r["event_time"] else " 待定")
+        return f"{r['event_date']}" + (f" {r['event_time']}" if r["event_time"] else "")
 
     def fmt_line(idx: int, r: dict) -> str:
         region_cn = "海外" if r["region"] == "overseas" else "国内"

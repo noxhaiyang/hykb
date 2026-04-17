@@ -9,4 +9,5 @@ data/bing_*.html
 data/competition_*.json
 data/competition_*.jsonl
 data/dingtalk_preview*.md
+dingtalk_report_utf8.txt
 data/douyin_heat_template.csv
